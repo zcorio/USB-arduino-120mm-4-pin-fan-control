@@ -5,6 +5,7 @@ import time
 
 SERIAL_PORT = "/dev/ttyUSB0"
 BAUD = 9600
+LAST_SPEED_FILE = "last_speed.txt"
 
 logging.basicConfig(level=logging.INFO)
 
@@ -23,6 +24,15 @@ class SerialManager:
         try:
             logging.info('Opening serial port %s @ %d', self.port, self.baud)
             self.ser = serial.Serial(self.port, self.baud, timeout=self.timeout)
+            # Give Arduino time to reset and boot after the serial port opens.
+            # Many Arduino boards toggle DTR on open which resets the MCU; wait
+            # a short time and clear any startup noise so commands aren't lost.
+            time.sleep(2)
+            try:
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+            except Exception:
+                pass
         except Exception:
             logging.exception('Failed to open serial port %s', self.port)
             self.ser = None
@@ -35,6 +45,10 @@ class SerialManager:
                 if not self.ser:
                     raise serial.SerialException('serial not available')
                 self.ser.write(data)
+                try:
+                    self.ser.flush()
+                except Exception:
+                    pass
                 return True
             except Exception:
                 logging.exception('Serial write failed (attempt %d/%d)', attempt, self.retries)
@@ -68,13 +82,30 @@ def set_fan(percent):
     ok = serial_mgr.write(data)
     if not ok:
         logging.error('Failed to send fan command after retries: %s', data)
+    else:
+        try:
+            with open(LAST_SPEED_FILE, 'w') as f:
+                f.write(str(percent))
+        except Exception:
+            logging.exception('Failed to persist last speed')
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
         speed = request.form.get("speed")
         set_fan(speed)
-    return render_template("index.html")
+    # Read persisted last speed (if any) and pass to the template.
+    last = None
+    try:
+        with open(LAST_SPEED_FILE, 'r') as f:
+            v = f.read().strip()
+            if v:
+                last = int(v)
+    except FileNotFoundError:
+        last = None
+    except Exception:
+        logging.exception('Failed to read last speed')
+    return render_template("index.html", last_speed=last)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

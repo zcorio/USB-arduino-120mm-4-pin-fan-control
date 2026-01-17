@@ -11,6 +11,8 @@
 
 <h1>Blade PC Fan Control</h1>
 
+<p><a href="http://192.168.50.83:5000/" target="_blank" rel="noopener">NAS Monitor</a></p>
+
 <form method="POST">
   <input id="speedRange" type="range" min="0" max="100" name="speed" value="50">
   <output id="speedOutput">50</output>%
@@ -24,9 +26,16 @@ document.addEventListener('DOMContentLoaded', function () {
   const output = document.getElementById('speedOutput');
 
   const stored = localStorage.getItem('fan_speed');
+  // Server-provided last speed (null or number)
+  const serverSpeed = {{ last_speed | tojson }};
+
   if (stored !== null) {
     slider.value = stored;
     output.textContent = stored;
+  } else if (serverSpeed !== null) {
+    slider.value = serverSpeed;
+    output.textContent = serverSpeed;
+    localStorage.setItem('fan_speed', serverSpeed);
   } else {
     output.textContent = slider.value;
   }
