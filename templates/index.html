@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+  <title>Fan Control</title>
+  <style>
+    body { font-family: sans-serif; padding: 40px; }
+    input { width: 300px; }
+  </style>
+</head>
+<body>
+
+<h1>Blade PC Fan Control</h1>
+
+<form method="POST">
+  <input type="range" min="0" max="100" name="speed" value="50"
+         oninput="this.nextElementSibling.value=this.value">
+  <output>50</output>%
+  <br><br>
+  <button type="submit">Set Speed</button>
+</form>
+
+</body>
+</html>
