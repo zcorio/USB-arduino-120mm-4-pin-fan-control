@@ -12,12 +12,36 @@
 <h1>Blade PC Fan Control</h1>
 
 <form method="POST">
-  <input type="range" min="0" max="100" name="speed" value="50"
-         oninput="this.nextElementSibling.value=this.value">
-  <output>50</output>%
+  <input id="speedRange" type="range" min="0" max="100" name="speed" value="50">
+  <output id="speedOutput">50</output>%
   <br><br>
   <button type="submit">Set Speed</button>
 </form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const slider = document.getElementById('speedRange');
+  const output = document.getElementById('speedOutput');
+
+  const stored = localStorage.getItem('fan_speed');
+  if (stored !== null) {
+    slider.value = stored;
+    output.textContent = stored;
+  } else {
+    output.textContent = slider.value;
+  }
+
+  slider.addEventListener('input', function () {
+    output.textContent = this.value;
+    localStorage.setItem('fan_speed', this.value);
+  });
+
+  // Ensure value is saved on submit as well
+  document.querySelector('form').addEventListener('submit', function () {
+    localStorage.setItem('fan_speed', slider.value);
+  });
+});
+</script>
 
 </body>
 </html>

@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  fan-control:
+    build: .
+    ports:
+      - "5000:5000"
+    # Map the host serial device into the container. Adjust as needed.
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
+    restart: unless-stopped
