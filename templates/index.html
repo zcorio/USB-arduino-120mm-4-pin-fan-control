@@ -1,56 +1,140 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fan Control</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { font-family: sans-serif; padding: 40px; }
-    input { width: 300px; }
+    body { padding-top: 3.5rem; }
+    .slider-large { width: 100%; }
+    .speed-value { font-size: 2rem; font-weight: 600; }
   </style>
 </head>
 <body>
 
-<h1>Blade PC Fan Control</h1>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="#">Blade Fan Control</a>
+    <div class="collapse navbar-collapse">
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item"><a class="nav-link" href="http://192.168.50.83:5000/" target="_blank" rel="noopener">NAS Monitor</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
 
-<p><a href="http://192.168.50.83:5000/" target="_blank" rel="noopener">NAS Monitor</a></p>
+<main class="container">
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title">Manual Fan Control</h5>
+          <form method="POST" class="mt-3">
+            <div class="mb-3">
+              <input id="speedRange" class="form-range slider-large" type="range" min="0" max="100" name="speed" value="50">
+            </div>
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <div class="speed-value"><span id="speedOutput">50</span>%</div>
+              <button class="btn btn-primary" type="submit">Set Speed</button>
+            </div>
+            <div class="text-muted">Last set (client/server): <span id="lastSet">-</span></div>
+          </form>
+        </div>
+      </div>
+    </div>
 
-<form method="POST">
-  <input id="speedRange" type="range" min="0" max="100" name="speed" value="50">
-  <output id="speedOutput">50</output>%
-  <br><br>
-  <button type="submit">Set Speed</button>
-</form>
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title">Auto Control</h5>
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="autoToggle">
+            <label class="form-check-label" for="autoToggle">Enable automatic fan control based on NAS temperature</label>
+          </div>
+          <p class="mb-1">NAS Temperature:</p>
+          <h3><span id="nasTemp">--</span> °C</h3>
+          <div class="mt-3 text-muted">Auto control maps ~30°C → 0% and ~60°C → 100% (linear).</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const slider = document.getElementById('speedRange');
   const output = document.getElementById('speedOutput');
+  const autoToggle = document.getElementById('autoToggle');
+  const nasTempEl = document.getElementById('nasTemp');
+  const lastSetEl = document.getElementById('lastSet');
 
   const stored = localStorage.getItem('fan_speed');
-  // Server-provided last speed (null or number)
-  const serverSpeed = {{ last_speed | tojson }};
+  const serverSpeed = {{ last_speed | default(none) | tojson }};
+  const serverAuto = {{ auto_enabled | default(none) | tojson }};
+  const serverTemp = {{ last_temp | default(none) | tojson }};
+
+  function setSlider(v) {
+    slider.value = v;
+    output.textContent = v;
+    lastSetEl.textContent = v;
+  }
 
   if (stored !== null) {
-    slider.value = stored;
-    output.textContent = stored;
+    setSlider(stored);
   } else if (serverSpeed !== null) {
-    slider.value = serverSpeed;
-    output.textContent = serverSpeed;
+    setSlider(serverSpeed);
     localStorage.setItem('fan_speed', serverSpeed);
   } else {
-    output.textContent = slider.value;
+    setSlider(slider.value);
   }
+
+  if (serverAuto) {
+    autoToggle.checked = true;
+    slider.disabled = true;
+    document.querySelector('button[type=submit]').disabled = true;
+  }
+  if (serverTemp !== null) nasTempEl.textContent = serverTemp;
 
   slider.addEventListener('input', function () {
     output.textContent = this.value;
     localStorage.setItem('fan_speed', this.value);
   });
 
-  // Ensure value is saved on submit as well
+  autoToggle.addEventListener('change', function () {
+    const enabled = this.checked;
+    fetch('/auto_toggle', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({enabled})
+    }).then(r => r.json()).then(data => {
+      slider.disabled = data.auto_enabled;
+      document.querySelector('button[type=submit]').disabled = data.auto_enabled;
+    }).catch(() => { this.checked = !enabled; });
+  });
+
+  // Poll status endpoint to update NAS temp and auto state
+  setInterval(function () {
+    fetch('/status').then(r => r.json()).then(s => {
+      if (s.last_temp !== null) nasTempEl.textContent = s.last_temp;
+      if (s.auto_enabled !== undefined) {
+        autoToggle.checked = s.auto_enabled;
+        slider.disabled = s.auto_enabled;
+        document.querySelector('button[type=submit]').disabled = s.auto_enabled;
+      }
+      if (s.last_speed !== null && localStorage.getItem('fan_speed') === null) {
+        setSlider(s.last_speed);
+      }
+    }).catch(() => {});
+  }, 5000);
+
+  // persist on submit
   document.querySelector('form').addEventListener('submit', function () {
     localStorage.setItem('fan_speed', slider.value);
   });
 });
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
